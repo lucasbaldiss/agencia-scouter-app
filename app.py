@@ -111,14 +111,23 @@ if 'scraped_leads' not in st.session_state:
 
 def generate_hashtags(city, niche):
     city_clean = city.lower().replace(" ", "").replace("-", "")
-    base_tags = [f"modelo{city_clean}", f"divulgacao{city_clean}", f"eventos{city_clean}", city_clean]
+    # Expandindo as hashtags para aumentar o alcance regional
+    base_tags = [
+        city_clean, 
+        f"{city_clean}rs", 
+        f"modelo{city_clean}", 
+        f"modelos{city_clean}", 
+        f"divulgacao{city_clean}", 
+        f"moda{city_clean}",
+        f"achados{city_clean}"
+    ]
     
     niche_map = {
-        "Infantil/Mães": [f"maes{city_clean}", f"minidiva{city_clean}", f"kids{city_clean}", f"mamaes{city_clean}"],
-        "Teen/Jovem": [f"teen{city_clean}", f"estudante{city_clean}", f"influencer{city_clean}"],
-        "Plus Size": [f"plussize{city_clean}", f"curvy{city_clean}"],
-        "Comercial/Beleza": [f"moda{city_clean}", f"lookdodia{city_clean}", f"maquiagem{city_clean}"],
-        "Fitness": [f"fitness{city_clean}", f"crossfit{city_clean}"]
+        "Infantil/Mães": [f"maes{city_clean}", f"minidiva{city_clean}", f"kids{city_clean}", f"mamaes{city_clean}", f"maternidade{city_clean}"],
+        "Teen/Jovem": [f"teen{city_clean}", f"estudante{city_clean}", f"influencer{city_clean}", f"garota{city_clean}"],
+        "Plus Size": [f"plussize{city_clean}", f"curvy{city_clean}", f"plussize{city_clean}rs"],
+        "Comercial/Beleza": [f"moda{city_clean}", f"lookdodia{city_clean}", f"maquiagem{city_clean}", f"estilo{city_clean}"],
+        "Fitness": [f"fitness{city_clean}", f"crossfit{city_clean}", f"treino{city_clean}"]
     }
     return base_tags + niche_map.get(niche, [])
 
@@ -213,12 +222,14 @@ def run_scouting(city, niche, min_f, max_f, limit, exclude_kw, use_mock=False, i
                 hashtag_obj = instaloader.Hashtag.from_name(L.context, tag)
                 posts = hashtag_obj.get_posts()
                 
+                posts_checked = 0
                 for post in posts:
-                    if count >= limit: break
+                    if count >= limit or posts_checked > 30: break
+                    posts_checked += 1
                     owner = post.owner_profile
                     if owner.username in profiles_checked: continue
                     profiles_checked.add(owner.username)
-                    time.sleep(random.uniform(2.0, 4.0))
+                    time.sleep(random.uniform(1.5, 3.0))
                     
                     if is_eligible(owner, min_f, max_f, exclude_kw):
                         real_name = owner.full_name.strip() if owner.full_name else owner.username
@@ -236,9 +247,10 @@ def run_scouting(city, niche, min_f, max_f, limit, exclude_kw, use_mock=False, i
                         count += 1
                         progress_bar.progress(min(count / limit, 1.0))
             except Exception as tag_err:
+                # Silenciosamente avança para a próxima hashtag em caso de limitação pontual
                 continue
 
-        status_text.text("✅ Busca concluída com sucesso!")
+        status_text.text("✅ Varredura finalizada!")
         return pd.DataFrame(leads), "OK"
         
     except Exception as e:
@@ -342,7 +354,10 @@ if st.button("🚀 Iniciar Varredura de Talentos", use_container_width=True):
         
         if status == "OK":
             st.session_state['scraped_leads'] = df_result
-            st.toast(f"Sucesso! Encontrados {len(df_result)} leads.", icon="🎉")
+            if len(df_result) > 0:
+                st.toast(f"Sucesso! Encontrados {len(df_result)} leads.", icon="🎉")
+            else:
+                st.warning("⚠️ **A busca terminou, mas nenhum perfil atendeu a 100% dos filtros definidos.**")
         else:
             # Painel Elegante de Tratamento de Erro
             st.markdown("""
@@ -353,7 +368,7 @@ if st.button("🚀 Iniciar Varredura de Talentos", use_container_width=True):
             """, unsafe_allow_html=True)
             
             if status == "WRONG_PASSWORD":
-                st.error("🔑 **Erro de Autenticação:** O Instagram bloqueou a verificação de senha direta vinda de um servidor em nuvem.")
+                st.error("🔑 **Erro de Autenticação:** O Instagram locks a verificação de senha direta vinda de um servidor em nuvem.")
                 st.info("💡 **Solução Definitiva:** Na barra lateral, em **🔑 Acesso Conta Instagram**, selecione a opção **'Cookie SessionID'**. Cole o seu cookie do navegador. Isso autentica sua conta instantaneamente sem pedir senha!")
             elif status == "NO_CREDENTIALS":
                 st.warning("👈 Preencha o login ou desmarque o 'Modo Simulação' na barra lateral para continuar.")
@@ -408,3 +423,10 @@ Gostaríamos de te convidar para conhecer a agência e conversar sobre oportunid
 Teria interesse em receber mais informações no WhatsApp ou por aqui? 😊"""
 
     st.text_area("Copia da Mensagem (Pronta para colar no DM):", value=copy_template, height=160)
+elif status == "OK" if 'status' in locals() else False:
+    st.info("""
+    💡 **Dicas para encontrar mais perfis na sua busca:**
+    1. **Diminua o limite de seguidores mínimos:** Muitos talentos em cidades do interior têm entre 300 e 800 seguidores. Tente colocar `300` no campo **Min Seg.**.
+    2. **Remova termos restritivos:** Limpe alguns termos da caixa *Excluir palavras na Bio*.
+    3. **Validação da SessionID:** Certifique-se de que o valor colado no *Cookie sessionid* no menu lateral veio da mesma conta que está ativa no seu navegador.
+    """)
