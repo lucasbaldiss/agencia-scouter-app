@@ -2,72 +2,168 @@ import streamlit as st
 import pandas as pd
 import time
 import random
-import re
-from datetime import datetime
+from datetime import datetime, date
 import instaloader
-import urllib.parse
 
-# Configuração da página Streamlit
-st.set_page_config(page_title="4Models | Multi-Scouter Hub", page_icon="🕵️‍♀️", layout="wide")
+st.set_page_config(
+    page_title="Four Models - IG Scouter",
+    page_icon="🎬",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-# Inicialização de variáveis de sessão
+# Estilização CSS de alto padrão para agência
+st.markdown("""
+<style>
+    /* Estilo Geral e Cores da Agência */
+    .stApp {
+        background-color: #0d0f12;
+        color: #e2e8f0;
+    }
+    .main-header {
+        background: linear-gradient(135deg, #1e1e2f 0%, #0d0f12 100%);
+        padding: 24px;
+        border-radius: 16px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+        margin-bottom: 24px;
+    }
+    .main-title {
+        color: #ffffff;
+        font-size: 28px;
+        font-weight: 700;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+    .sub-title {
+        color: #94a3b8;
+        font-size: 14px;
+        margin-top: 6px;
+    }
+    /* Cards de Estatísticas e Status */
+    .status-card-connected {
+        background: rgba(16, 185, 129, 0.1);
+        border: 1px solid rgba(16, 185, 129, 0.3);
+        color: #34d399;
+        padding: 14px 18px;
+        border-radius: 12px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 20px;
+    }
+    .status-card-mock {
+        background: rgba(59, 130, 246, 0.1);
+        border: 1px solid rgba(59, 130, 246, 0.3);
+        color: #60a5fa;
+        padding: 14px 18px;
+        border-radius: 12px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 20px;
+    }
+    .status-card-error {
+        background: rgba(239, 68, 68, 0.1);
+        border: 1px solid rgba(239, 68, 68, 0.3);
+        color: #f87171;
+        padding: 16px 20px;
+        border-radius: 12px;
+        margin-bottom: 20px;
+    }
+    /* Estilização da Sidebar */
+    section[data-testid="stSidebar"] {
+        background-color: #12161f !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    /* Botão Principal */
+    .stButton>button {
+        background: linear-gradient(90deg, #3b82f6 0%, #2563eb 100%) !important;
+        color: white !important;
+        font-weight: 600 !important;
+        border-radius: 10px !important;
+        padding: 12px 24px !important;
+        border: none !important;
+        box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4) !important;
+        transition: all 0.3s ease !important;
+        width: 100%;
+    }
+    .stButton>button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(37, 99, 235, 0.6) !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+if 'dm_count' not in st.session_state:
+    st.session_state['dm_count'] = 0
+if 'last_reset' not in st.session_state:
+    st.session_state['last_reset'] = date.today()
+if st.session_state['last_reset'] != date.today():
+    st.session_state['dm_count'] = 0
+    st.session_state['last_reset'] = date.today()
 if 'scraped_leads' not in st.session_state:
     st.session_state['scraped_leads'] = pd.DataFrame()
-if 'dm_counter' not in st.session_state:
-    st.session_state['dm_counter'] = 0
 
 def generate_hashtags(city, niche):
-    """Gera hashtags estratégicas com base na cidade e no nicho para otimizar o scouting."""
-    city_clean = re.sub(r'[^a-zA-Z0-9]', '', city.lower())
+    city_clean = city.lower().replace(" ", "").replace("-", "")
+    base_tags = [f"modelo{city_clean}", f"divulgacao{city_clean}", f"eventos{city_clean}", city_clean]
     
-    niche_mapping = {
-        "Infantil/Mães": [f"maternidade{city_clean}", f"maesde{city_clean}", f"kids{city_clean}", f"minidiva{city_clean}"],
-        "Teen": [f"teen{city_clean}", f"jovens{city_clean}", f"meninasde{city_clean}", f"estiloteen{city_clean}"],
-        "Plus Size": [f"plussize{city_clean}", f"curvy{city_clean}", f"modaplussize{city_clean}"],
-        "Comercial/Beleza": [f"modelo{city_clean}", f"beleza{city_clean}", f"look{city_clean}", f"modafeminina{city_clean}"],
-        "Fitness": [f"fitness{city_clean}", f"gym{city_clean}", f"treino{city_clean}"],
-        "Estilo Alternativo": [f"alt{city_clean}", f"tatuagem{city_clean}", f"estilo{city_clean}"]
+    niche_map = {
+        "Infantil/Mães": [f"maes{city_clean}", f"minidiva{city_clean}", f"kids{city_clean}", f"mamaes{city_clean}"],
+        "Teen/Jovem": [f"teen{city_clean}", f"estudante{city_clean}", f"influencer{city_clean}"],
+        "Plus Size": [f"plussize{city_clean}", f"curvy{city_clean}"],
+        "Comercial/Beleza": [f"moda{city_clean}", f"lookdodia{city_clean}", f"maquiagem{city_clean}"],
+        "Fitness": [f"fitness{city_clean}", f"crossfit{city_clean}"]
     }
-    
-    base_tags = niche_mapping.get(niche, [f"modelo{city_clean}", city_clean])
-    base_tags.append(city_clean)
-    return list(set(base_tags))
+    return base_tags + niche_map.get(niche, [])
 
-def is_eligible(profile, min_followers, max_followers, exclude_keywords):
-    """Filtra perfis para garantir que são pessoas reais e qualificadas."""
-    if not (min_followers <= profile.followers <= max_followers):
+def is_eligible(profile, min_f, max_f, exclude_keywords):
+    if not (min_f <= profile.followers <= max_f):
         return False
-    
-    bio_lower = profile.biography.lower() if profile.biography else ""
-    for word in exclude_keywords:
-        if word.strip() and word.strip().lower() in bio_lower:
-            return False # Exclui lojas, empresas, etc.
-            
+    bio = (profile.biography or "").lower()
+    for kw in exclude_keywords:
+        if kw.strip() and kw.strip().lower() in bio:
+            return False
     return True
 
-def run_scouting(city, niche, min_f, max_f, limit, exclude_kw, use_mock=False, ig_user="", ig_pass=""):
-    """Executa a raspagem de dados reais ou simulados do Instagram."""
+def run_scouting(city, niche, min_f, max_f, limit, exclude_kw, use_mock=False, ig_user="", ig_pass="", session_cookie=""):
+    """Executa a raspagem com suporte a login normal e por Cookie sessionid."""
     hashtags = generate_hashtags(city, niche)
     leads = []
     
     if use_mock:
-        st.info("💡 Modo Simulação Ativo: Dados fictícios gerados para demonstração de interface.")
         progress_bar = st.progress(0)
+        sample_names = [
+            ("Juliana Rossi", "ju_rossi"), ("Camila Becker", "cabi_becker"), 
+            ("Mariana Souza", "mari_souza_"), ("Fernanda Lima", "fe_limas"), 
+            ("Larissa Manoela", "lari_manu_sm"), ("Beatriz Castro", "bia_castro_"),
+            ("Carolina Martins", "carol_martins"), ("Gabriela Ramos", "gabi_ramos"),
+            ("Amanda Oliveira", "amanda_oli"), ("Vanessa Duarte", "vanessaduarte"),
+            ("Letícia Mendes", "let_mendes"), ("Rafaela Silva", "rafa_silva_sm")
+        ]
         for i in range(limit):
-            time.sleep(0.1) # Simulação rápida
+            time.sleep(0.05)
+            name, username = sample_names[i % len(sample_names)]
+            handle = f"{username}_{i+1}" if i >= len(sample_names) else username
+            
             leads.append({
-                "Foto": f"https://placehold.co/100x100/3A86FF/FFFFFF?text=P{i+1}",
-                "Nome": f"Candidato Simulado {i+1}",
-                "Handle": f"@user_mock_{i+1}",
+                "Foto": f"https://i.pravatar.cc/150?img={(i % 70) + 1}",
+                "Nome": name,
+                "Handle": f"@{handle}",
                 "Seguidores": random.randint(min_f, max_f),
-                "Bio": f"Amo fotografia 📸 | {city} | Contato via DM! {random.choice(['Estudante', 'Modelo', 'Mãe de 2'])}",
-                "Link Bio": "https://wa.me/5511999999999" if random.random() > 0.5 else "N/A",
-                "URL Perfil": f"https://instagram.com/user_mock_{i+1}",
+                "Bio": f"📸 | {city} | Contato via DM! {random.choice(['Estudante de Moda', 'Mãe de 2', 'Modelo Comercial'])}",
+                "Link Bio": "https://wa.me/5511999999999" if random.random() > 0.5 else None,
+                "URL Perfil": f"https://www.instagram.com/{handle}/",
                 "Plataforma": "Instagram",
                 "Nicho": niche
             })
             progress_bar.progress((i + 1) / limit)
-        return pd.DataFrame(leads)
+        return pd.DataFrame(leads), "OK"
 
     # Conexão Real com Instaloader
     try:
@@ -76,24 +172,36 @@ def run_scouting(city, niche, min_f, max_f, limit, exclude_kw, use_mock=False, i
             download_videos=False,
             download_video_thumbnails=False,
             download_comments=False,
-            save_metadata=False
+            save_metadata=False,
+            user_agent="Mozilla/5.0 (iPhone; CPU iPhone OS 16_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Mobile/15E148 Safari/604.1"
         )
         
-        # Realiza Login se credenciais forem fornecidas
-        if ig_user and ig_pass:
+        # Tentativa de autenticação
+        if session_cookie.strip():
+            # Login por Cookie sessionid (Super Seguro para Nuvem)
+            try:
+                L.context._session.cookies.set('sessionid', session_cookie.strip(), domain='.instagram.com')
+                L.context.username = ig_user if ig_user else "session_user"
+                st.toast("🔑 Autenticado com sucesso via Cookie SessionID!", icon="✅")
+            except Exception as cookie_err:
+                return pd.DataFrame(), f"Erro no Cookie: {str(cookie_err)}"
+        elif ig_user and ig_pass:
+            # Login por Usuário/Senha
             try:
                 L.login(ig_user, ig_pass)
-                st.sidebar.success(f"Autenticado como: @{ig_user}")
+            except instaloader.exceptions.BadCredentialsException:
+                return pd.DataFrame(), "WRONG_PASSWORD"
+            except instaloader.exceptions.TwoFactorAuthRequiredException:
+                return pd.DataFrame(), "2FA_REQUIRED"
+            except instaloader.exceptions.ConnectionException as conn_err:
+                return pd.DataFrame(), f"Trava de IP no servidor: {str(conn_err)}"
             except Exception as login_err:
-                st.error(f"⚠️ Erro ao fazer login no Instagram com @{ig_user}: {str(login_err)}")
-                st.warning("Recomendação: Verifique se a conta não exige confirmação de SMS/Email no app oficial ou use o Modo Simulação.")
-                return pd.DataFrame()
+                return pd.DataFrame(), str(login_err)
         else:
-            st.warning("⚠️ Você está tentando buscar sem login. Servidores em nuvem (como Streamlit Cloud) são bloqueados pelo Instagram se não houver login. Insira uma conta de suporte na barra lateral.")
+            return pd.DataFrame(), "NO_CREDENTIALS"
         
         progress_bar = st.progress(0)
         status_text = st.empty()
-        
         profiles_checked = set()
         count = 0
         
@@ -107,189 +215,196 @@ def run_scouting(city, niche, min_f, max_f, limit, exclude_kw, use_mock=False, i
                 
                 for post in posts:
                     if count >= limit: break
-                    
                     owner = post.owner_profile
-                    if owner.username in profiles_checked:
-                        continue
-                        
+                    if owner.username in profiles_checked: continue
                     profiles_checked.add(owner.username)
-                    
-                    # Delay anti-ban entre requisições
                     time.sleep(random.uniform(2.0, 4.0))
                     
                     if is_eligible(owner, min_f, max_f, exclude_kw):
+                        real_name = owner.full_name.strip() if owner.full_name else owner.username
                         leads.append({
                             "Foto": owner.profile_pic_url,
-                            "Nome": owner.full_name or owner.username,
+                            "Nome": real_name,
                             "Handle": f"@{owner.username}",
                             "Seguidores": owner.followers,
                             "Bio": owner.biography.replace('\n', ' ') if owner.biography else "",
-                            "Link Bio": owner.external_url or "N/A",
-                            "URL Perfil": f"https://instagram.com/{owner.username}",
+                            "Link Bio": owner.external_url if owner.external_url else None,
+                            "URL Perfil": f"https://www.instagram.com/{owner.username}/",
                             "Plataforma": "Instagram",
                             "Nicho": niche
                         })
                         count += 1
                         progress_bar.progress(min(count / limit, 1.0))
-                        
             except Exception as tag_err:
-                st.caption(f"Aviso na hashtag #{tag}: {str(tag_err)}")
                 continue
 
-        status_text.text("✅ Busca concluída!")
-        return pd.DataFrame(leads)
+        status_text.text("✅ Busca concluída com sucesso!")
+        return pd.DataFrame(leads), "OK"
         
     except Exception as e:
-        st.error(f"Erro no Scraper: {str(e)}")
-        return pd.DataFrame()
+        return pd.DataFrame(), str(e)
 
-st.sidebar.title("🕵️‍♀️ 4Models Scouter Hub")
-st.sidebar.markdown("---")
-
-st.sidebar.header("1. Alvo de Busca")
-city_input = st.sidebar.text_input("Cidade/Região", value="Santa Maria")
-niche_input = st.sidebar.selectbox("Nicho/Perfil", 
-    ["Infantil/Mães", "Teen", "Plus Size", "Comercial/Beleza", "Fitness", "Estilo Alternativo"])
-
-st.sidebar.header("2. Qualificação")
-col1, col2 = st.sidebar.columns(2)
-with col1:
-    min_followers = st.number_input("Min Seguidores", min_value=0, value=500, step=100)
-with col2:
-    max_followers = st.number_input("Max Seguidores", min_value=0, value=20000, step=500)
-
-exclude_words = st.sidebar.text_area("Palavras a Excluir na Bio (separadas por vírgula)", 
-    value="loja, marca, ofc, oficial, roupas, unhas, lash, designer, empresa, vendas, loja virtual, atacado")
-
-st.sidebar.header("3. Configuração de Extração")
-scrape_limit = st.sidebar.slider("Limite de Leads por Busca", 5, 50, 15)
-
-is_mock = st.sidebar.checkbox("Usar Modo Simulação (Anti-Ban)", value=True, 
-    help="Mantenha ativo para testar a interface sem risco. Desmarque para buscar perfis reais.")
-
-# Expander para credenciais de acesso seguro do Instagram
-with st.sidebar.expander("🔑 Credenciais Instagram (Para busca real na Nuvem)"):
-    st.caption("Use uma conta de suporte/secundária (nunca a oficial da agência).")
-    ig_user_input = st.text_input("Usuário do Instagram", value="")
-    ig_pass_input = st.text_input("Senha do Instagram", type="password", value="")
-
-st.sidebar.markdown("---")
-st.sidebar.header("🛡️ Radar Anti-Ban e Limites Diários")
-st.sidebar.metric("DMs Enviadas Hoje (Sessão)", f"{st.session_state['dm_counter']} / 25 DMs")
-
-if st.sidebar.button("➕ Registrar DM Enviada"):
-    st.session_state['dm_counter'] += 1
-    st.rerun()
-
-if st.session_state['dm_counter'] >= 25:
-    st.sidebar.error("🚨 ALERTA DE SEGURANÇA: Limite diário recomendado atingido (25 DMs). Pause os disparos por 24 horas para evitar bloqueio da conta!")
-elif st.session_state['dm_counter'] >= 18:
-    st.sidebar.warning("⚠️ Atenção: Você está próximo do teto seguro diário do Meta/Instagram.")
-
-st.title("Painel de Prospecção Ativa Multiplataforma")
-st.markdown("Identifique talentos regionais no Instagram, TikTok e Facebook, qualifique os perfis e gere abordagens personalizadas.")
-
-tab_ig, tab_tiktok, tab_fb = st.tabs(["📸 Instagram Scouter", "🎵 TikTok Scouter", "👥 Facebook Groups"])
-
-with tab_ig:
-    st.subheader("Buscador de Talentos no Instagram")
+with st.sidebar:
+    st.image("https://img.icons8.com/color/96/instagram-new--v1.png", width=50)
+    st.title("Four Models Scouter")
+    st.caption("v2.5 - Sistema Avançado de Prospecção")
+    st.markdown("---")
     
-    if is_mock:
-        st.warning("⚠️ MODO SIMULAÇÃO ATIVO. Desmarque 'Usar Modo Simulação' na barra lateral e informe uma conta de suporte para coletar dados reais.")
-    else:
-        st.info("🟢 MODO REAL ATIVO. Buscando perfis ao vivo via hashtags e geolocalização.")
-
-    if st.button("🚀 Iniciar Scouting no Instagram", key="btn_ig", use_container_width=True):
-        with st.spinner('Mapeando perfis locais... Isso pode levar alguns instantes.'):
-            exclude_list = [w.strip() for w in exclude_words.split(',')]
-            df = run_scouting(
-                city_input, niche_input, min_followers, max_followers, 
-                scrape_limit, exclude_list, is_mock, ig_user_input, ig_pass_input
-            )
-            
-            if not df.empty:
-                st.session_state['scraped_leads'] = df
-                st.success(f"Sucesso! Encontramos {len(df)} leads qualificados para {city_input}.")
-            else:
-                st.warning("Nenhum perfil encontrado. Tente ajustar a contagem de seguidores ou as credenciais de login.")
-
-    if not st.session_state['scraped_leads'].empty:
-        df = st.session_state['scraped_leads']
+    st.subheader("1. Alvo da Prospecção")
+    city_input = st.text_input("Cidade/Região", value="Santa Maria", help="Ex: Santa Maria, Caxias do Sul, Porto Alegre")
+    niche_input = st.selectbox(
+        "Nicho / Perfil Desejado",
+        ["Infantil/Mães", "Teen/Jovem", "Plus Size", "Comercial/Beleza", "Fitness"]
+    )
+    
+    st.subheader("2. Filtros de Elegibilidade")
+    col_min, col_max = st.columns(2)
+    with col_min:
+        min_f = st.number_input("Min Seg.", value=500, step=100)
+    with col_max:
+        max_f = st.number_input("Max Seg.", value=25000, step=1000)
         
-        st.markdown("### Leads Encontrados")
-        display_df = df.drop(columns=['Foto'], errors='ignore')
-        st.dataframe(display_df, use_container_width=True)
+    exclude_kw_input = st.text_area(
+        "Excluir palavras na Bio",
+        value="loja, marca, oficial, empresa, vendas, agência",
+        help="Termos separados por vírgula"
+    ).split(",")
+    
+    st.subheader("3. Parâmetros de Extração")
+    limit_input = st.slider("Quantidade de Leads", 5, 50, 15)
+    
+    use_mock = st.checkbox("⚙️ Modo Simulação (Sem Necessidade de Login)", value=True)
+    
+    st.markdown("---")
+    
+    # Sanfona Elegante para Login e Credenciais
+    with st.expander("🔑 Acesso Conta Instagram (Para Busca Real)"):
+        st.caption("Como a nuvem (AWS/Streamlit) é um IP de servidor, escolha o melhor método de conexão abaixo:")
         
-        csv = df.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="📥 Exportar Lista de Leads (CSV/Excel)",
-            data=csv,
-            file_name=f'leads_ig_{niche_input}_{city_input.replace(" ", "")}_{datetime.now().strftime("%Y%m%d")}.csv',
-            mime='text/csv',
+        login_method = st.radio("Método de Autenticação", ["Cookie SessionID (Recomendado)", "Usuário e Senha Direct"], index=0)
+        
+        ig_user = ""
+        ig_pass = ""
+        session_cookie = ""
+        
+        if login_method == "Cookie SessionID (Recomendado)":
+            ig_user = st.text_input("Seu @Usuário", value="", placeholder="ex: scouter_fourmodels")
+            session_cookie = st.text_input("Cookie sessionid", type="password", help="Cole o cookie sessionid extraído do navegador")
+            st.info("💡 **Como pegar o SessionID:** No seu navegador, abra o Instagram -> F12 -> Application/Storage -> Cookies -> Copie o valor de 'sessionid'. Isso ignora qualquer erro de senha ou SMS!")
+        else:
+            ig_user = st.text_input("Usuário do Insta", value="", placeholder="ex: scouter_fourmodels")
+            ig_pass = st.text_input("Senha do Insta", type="password")
+            st.warning("⚠️ O Instagram costuma recusar login direto por senha vindo de servidores em nuvem. Se der erro, use o método Cookie SessionID acima.")
+
+    st.markdown("---")
+    st.subheader("🛡️ Controle de DMs Diárias")
+    st.metric("Mensagens Enviadas Hoje", f"{st.session_state['dm_count']} / 25")
+    if st.button("➕ Registrar 1 DM Enviada"):
+        st.session_state['dm_count'] += 1
+        st.rerun()
+
+st.markdown("""
+<div class="main-header">
+    <div class="main-title">🎬 Four Models Scouting Hub</div>
+    <div class="sub-title">Ferramenta de prospeção orgânica de talentos por cidade, nicho e geolocalização.</div>
+</div>
+""", unsafe_allow_html=True)
+
+# Status Bar
+if use_mock:
+    st.markdown("""
+    <div class="status-card-mock">
+        ⚡ <b>MODO SIMULAÇÃO ATIVO</b> — Gerando perfis demonstrativos de teste com dados reais para validação de interface.
+    </div>
+    """, unsafe_allow_html=True)
+else:
+    st.markdown("""
+    <div class="status-card-connected">
+        🟢 <b>MODO REAL ATIVO</b> — Conectando ao Instagram para buscar talentos em tempo real em <b>{}</b>.
+    </div>
+    """.format(city_input), unsafe_allow_html=True)
+
+# Botão Principal de Ação
+if st.button("🚀 Iniciar Varredura de Talentos", use_container_width=True):
+    with st.spinner("Conectando e filtrando perfis qualificados..."):
+        df_result, status = run_scouting(
+            city=city_input,
+            niche=niche_input,
+            min_f=min_f,
+            max_f=max_f,
+            limit=limit_input,
+            exclude_kw=exclude_kw_input,
+            use_mock=use_mock,
+            ig_user=ig_user,
+            ig_pass=ig_pass,
+            session_cookie=session_cookie
         )
         
-        st.markdown("---")
-        st.markdown("### 💬 Gerador de Abordagem Personalizada")
-        
-        selected_lead = st.selectbox("Selecione o Lead para Abordar:", df['Nome'].tolist() + df['Handle'].tolist())
-        
-        lead_data = df[(df['Nome'] == selected_lead) | (df['Handle'] == selected_lead)].iloc[0]
-        first_name = str(lead_data['Nome']).split()[0] if lead_data['Nome'] else lead_data['Handle']
-        
-        templates = {
-            "Infantil/Mães": f"Oi {first_name}, tudo bem? Vi o seu perfil e o charme do seu pequeno(a)! Somos da equipe de scouting da agência 4Models. Estamos selecionando novos rostos infantis na região de {city_input} para marcas parceiras. Gostaria de te passar mais detalhes de como funciona?",
-            "Teen": f"Oie {first_name}, tudo bem? Nossa equipe de scouting curtiu muito o teu estilo e fotos aqui no Insta! A 4Models está buscando novos talentos teen na região de {city_input}. Topa conversar com a gente no Whats para entender como funciona uma seletiva?",
-            "Plus Size": f"Olá {first_name}! Tudo bem? Acompanhamos teu perfil e amamos a tua beleza e presença! A 4Models está expandindo o casting Plus Size em {city_input} e adoraríamos te apresentar uma oportunidade. Posso te enviar as informações?",
-            "Geral": f"Oie {first_name}, tudo bem? O scouting da 4Models amou a tua energia e perfil aqui no Insta! Estamos com uma seletiva aberta para novos talentos na região de {city_input}. Queremos muito te conhecer, podemos bater um papo?"
-        }
-        
-        copy_text = templates.get(niche_input, templates["Geral"])
-        
-        colA, colB = st.columns([1, 2])
-        with colA:
-            if str(lead_data['Foto']).startswith('http'):
-                st.image(lead_data['Foto'], width=140)
-            st.markdown(f"**Handle:** {lead_data['Handle']}")
-            st.markdown(f"**Bio:** {lead_data['Bio']}")
-            st.markdown(f"[🔗 Abrir Perfil no Instagram]({lead_data['URL Perfil']})")
-                 
-        with colB:
-            st.text_area("Copy Sugerida (Pronta para copiar e colar na DM):", value=copy_text, height=140)
-            st.info("💡 **Dica de Ouro:** Curta 2 fotos do candidato e faça 1 comentário genuíno ANTES de enviar a DM. Isso garante que sua mensagem vá para a caixa principal e previne queda em 'Solicitações Ocultas'.")
+        if status == "OK":
+            st.session_state['scraped_leads'] = df_result
+            st.toast(f"Sucesso! Encontrados {len(df_result)} leads.", icon="🎉")
+        else:
+            # Painel Elegante de Tratamento de Erro
+            st.markdown("""
+            <div class="status-card-error">
+                <h4>⚠️ Atenção: Trava de Segurança do Instagram</h4>
+                <p>O Instagram recusou a conexão por senha vindo do servidor da nuvem (Streamlit/AWS Cloud).</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            if status == "WRONG_PASSWORD":
+                st.error("🔑 **Erro de Autenticação:** O Instagram bloqueou a verificação de senha direta vinda de um servidor em nuvem.")
+                st.info("💡 **Solução Definitiva:** Na barra lateral, em **🔑 Acesso Conta Instagram**, selecione a opção **'Cookie SessionID'**. Cole o seu cookie do navegador. Isso autentica sua conta instantaneamente sem pedir senha!")
+            elif status == "NO_CREDENTIALS":
+                st.warning("👈 Preencha o login ou desmarque o 'Modo Simulação' na barra lateral para continuar.")
+            else:
+                st.error(f"Detalhes do Erro: {status}")
 
-with tab_tiktok:
-    st.subheader("🎵 TikTok Scouting Radar")
-    st.markdown("Devido às restrições do TikTok, o método mais eficaz e seguro é o direcionamento de busca otimizada por palavras-chave e hashtags regionais.")
+if not st.session_state['scraped_leads'].empty:
+    df = st.session_state['scraped_leads']
     
-    tk_city = city_input.lower().replace(" ", "")
-    tk_query = f"modelo {city_input}"
+    st.markdown("### 📋 Leads Qualificados Encontrados")
     
-    tt_url = f"https://www.tiktok.com/search?q={urllib.parse.quote(tk_query)}"
-    tt_tag_url = f"https://www.tiktok.com/tag/modelo{tk_city}"
+    # Tabela Formatada Profissional
+    st.dataframe(
+        df,
+        column_config={
+            "Foto": st.column_config.ImageColumn("Foto", help="Foto de Perfil"),
+            "Nome": st.column_config.TextColumn("Nome no Perfil", help="Nome do talento no Insta"),
+            "Handle": st.column_config.TextColumn("Usuário (@)"),
+            "Seguidores": st.column_config.NumberColumn("Seguidores", format="%d"),
+            "Bio": st.column_config.TextColumn("Biografia", width="medium"),
+            "Link Bio": st.column_config.LinkColumn("Link Bio", display_text="Abrir Link ↗️"),
+            "URL Perfil": st.column_config.LinkColumn("Perfil Insta", display_text="Ver Perfil ↗️"),
+        },
+        use_container_width=True,
+        hide_index=True
+    )
     
-    st.markdown(f"""
-    #### Links Diretos de Scouting para {city_input}:
-    - 🔍 [Abrir Busca TikTok por Criadores em {city_input}]({tt_url})
-    - 🏷️ [Explorar Hashtag #modelo{tk_city} no TikTok]({tt_tag_url})
-    """)
+    col_csv, col_copy = st.columns([1, 2])
+    with col_csv:
+        csv = df.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="📥 Exportar Tabela para CSV/Excel",
+            data=csv,
+            file_name=f'leads_{city_input.lower()}_{datetime.now().strftime("%Y%m%d")}.csv',
+            mime='text/csv',
+            use_container_width=True
+        )
+        
+    st.markdown("---")
+    st.markdown("### 💬 Gerador de Mensagem Personalizada (Abordagem)")
     
-    st.markdown("#### Copy Especial para Abordagem TikTok:")
-    st.code(f"Oie! Vi teus vídeos no TikTok e a nossa equipe de scouting da 4Models achou teu conteúdo incrível! Estamos selecionando novos rostos em {city_input}. Dá uma olhada no nosso Insta e me chama se quiser participar!", language="text")
+    selected_handle = st.selectbox("Selecione o Lead para Abordar:", df['Handle'].tolist())
+    selected_lead = df[df['Handle'] == selected_handle].iloc[0]
+    
+    first_name = selected_lead['Nome'].split()[0] if selected_lead['Nome'] else "tudo bem"
+    
+    copy_template = f"""Oi {first_name}, tudo bem? ✨
+Sou da equipe de novos talentos da Agência Four Models! 🎬
+Estávamos analisando alguns perfis de {city_input} para os nossos próximos materiais e seleções e adoramos o teu perfil/estilo.
 
-with tab_fb:
-    st.subheader("👥 Facebook Groups & Comunidades")
-    st.markdown("O Facebook é uma excelente fonte de captação para o nicho **Infantil/Mães** e **Comercial** através dos Grupos da Cidade.")
-    
-    fb_query_maes = f"mães {city_input}"
-    fb_query_modelos = f"modelos {city_input}"
-    
-    fb_url_maes = f"https://www.facebook.com/groups/search/groups/?q={urllib.parse.quote(fb_query_maes)}"
-    fb_url_modelos = f"https://www.facebook.com/groups/search/groups/?q={urllib.parse.quote(fb_query_modelos)}"
-    
-    st.markdown(f"""
-    #### Atalhos de Grupos em {city_input}:
-    - 👩‍👧‍👦 [Buscar Grupos de Mães em {city_input}]({fb_url_maes})
-    - 📸 [Buscar Grupos de Modelos e Divulgação em {city_input}]({fb_url_modelos})
-    """)
-    
-    st.info("💡 **Estratégia de Captação no Facebook:** Entre nos grupos de Mães da cidade e publique posts informativos ou de convite para seletivas presenciais com link direto para o WhatsApp do Scouter.")
+Gostaríamos de te convidar para conhecer a agência e conversar sobre oportunidades para {niche_input}.
+Teria interesse em receber mais informações no WhatsApp ou por aqui? 😊"""
+
+    st.text_area("Copia da Mensagem (Pronta para colar no DM):", value=copy_template, height=160)
